@@ -85,7 +85,7 @@ The loader has three responsibilities:
    `yarn.lock`, `package-lock.json`, default npm — **only** to choose the
    install line (`pnpm add -D` / `yarn add -D` / `bun add -d` /
    `npm install --save-dev @vitest-agent/plugin`) in the not-installed block
-   printed to **stderr**, then `exec npx --yes @vitest-agent/mcp "$@"` as a
+   printed to **stderr**, then `exec npx --yes @vitest-agent/mcp@4 "$@"` as a
    registry fallback.
 
 The `exec` is load-bearing. After startup, Claude Code's direct child is the
