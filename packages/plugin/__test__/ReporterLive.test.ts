@@ -1,4 +1,4 @@
-import { DataStore, HistoryTracker, OutputRenderer } from "@vitest-agent/sdk";
+import { DataStore, HistoryTracker, OutputRenderer } from "@vitest-agent/engine";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { ReporterLive } from "../src/layers/ReporterLive.js";
@@ -9,7 +9,7 @@ describe("ReporterLive", () => {
 		const result = await Effect.runPromise(
 			Effect.provide(
 				Effect.flatMap(DataStore, () => Effect.succeed("ok")),
-				ReporterLive(":memory:"),
+				ReporterLive({ dbPath: ":memory:", env: {} }),
 			),
 		);
 		expect(result).toBe("ok");
@@ -19,7 +19,7 @@ describe("ReporterLive", () => {
 		const result = await Effect.runPromise(
 			Effect.provide(
 				Effect.flatMap(CoverageAnalyzer, () => Effect.succeed("ok")),
-				ReporterLive(":memory:"),
+				ReporterLive({ dbPath: ":memory:", env: {} }),
 			),
 		);
 		expect(result).toBe("ok");
@@ -30,7 +30,7 @@ describe("ReporterLive", () => {
 			Effect.gen(function* () {
 				const tracker = yield* HistoryTracker;
 				return tracker;
-			}).pipe(Effect.provide(ReporterLive(":memory:"))),
+			}).pipe(Effect.provide(ReporterLive({ dbPath: ":memory:", env: {} }))),
 		);
 		expect(result).toBeDefined();
 		expect(result.classify).toBeTypeOf("function");
@@ -40,7 +40,7 @@ describe("ReporterLive", () => {
 		const result = await Effect.runPromise(
 			Effect.provide(
 				Effect.flatMap(OutputRenderer, () => Effect.succeed("ok")),
-				ReporterLive(":memory:"),
+				ReporterLive({ dbPath: ":memory:", env: {} }),
 			),
 		);
 		expect(result).toBe("ok");

@@ -24,6 +24,10 @@
 		".": "./src/index.ts",
 		"./package.json": "./package.json"
 	},
+	"bin": {
+		"vitest-agent": "./src/bin/vitest-agent.ts",
+		"vitest-agent-mcp": "./src/bin/vitest-agent-mcp.ts"
+	},
 	"scripts": {
 		"build:dev": "node savvy.build.ts --target dev",
 		"build:prod": "node savvy.build.ts --target prod",
@@ -35,6 +39,7 @@
 		"@effect/sql-sqlite-node": "catalog:effect",
 		"@effected/workspaces": "catalog:effected",
 		"@vitest-agent/cli": "workspace:*",
+		"@vitest-agent/engine": "workspace:*",
 		"@vitest-agent/mcp": "workspace:*",
 		"@vitest-agent/reporter": "workspace:*",
 		"@vitest-agent/sdk": "workspace:*",
@@ -43,7 +48,7 @@
 	},
 	"devDependencies": {
 		"@effected/memfs": "catalog:effected",
-		"@savvy-web/bundler": "^2.3.4",
+		"@savvy-web/bundler": "^2.3.6",
 		"@types/node": "catalog:build",
 		"@vitest/coverage-istanbul": "catalog:test",
 		"@vitest/coverage-v8": "catalog:test",

@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EnvironmentDetector, EnvironmentDetectorLive, resolveLogLevel } from "@vitest-agent/engine";
 import type {
 	AgentPluginOptions,
 	ConsoleMode,
@@ -17,14 +18,11 @@ import {
 	AgentConsoleMode,
 	CiConsoleMode,
 	CoverageLevel,
-	EnvironmentDetector,
-	EnvironmentDetectorLive,
 	HumanConsoleMode,
 	SRC_DIR,
 	TEST_DIR,
 	formatFatalError,
 	isTestFileName,
-	resolveLogLevel,
 } from "@vitest-agent/sdk";
 import type { Layer } from "effect";
 import { Effect, Schema } from "effect";
@@ -316,11 +314,11 @@ function installViteSourceMapWarningFilter(resolvedConfig: ResolvedConfigLike): 
  * @public
  */
 export function AgentPlugin(options: AgentPluginConstructorOptions = {}, _layer?: Layer.Layer<EnvironmentDetector>) {
-	const layer = _layer ?? EnvironmentDetectorLive;
+	const layer = _layer ?? EnvironmentDetectorLive(process.env);
 
 	// Plugin's own debug-log helper reads VITEST_REPORTER_LOG_LEVEL via
 	// resolveLogLevel; `logLevel` is no longer a user option.
-	const logLevel = resolveLogLevel();
+	const logLevel = resolveLogLevel(process.env);
 	const shouldLog = logLevel !== undefined && logLevel !== "None";
 	const log = shouldLog
 		? (...args: unknown[]) => process.stderr.write(`[vitest-agent:plugin] ${args.map(String).join(" ")}\n`)

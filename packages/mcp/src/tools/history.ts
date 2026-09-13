@@ -1,16 +1,14 @@
-/**
- * `test_history` MCP tool — Schema-driven implementation.
- *
- * The structured payload bundles the underlying `HistoryRecord` plus
- * the lighter `flaky` / `persistent` projections the UI uses, so an
- * agent doesn't need to recompute them from runs[].
- *
- * @packageDocumentation
- */
+// `test_history` MCP tool — Schema-driven implementation.
+//
+// The structured payload bundles the underlying `HistoryRecord` plus
+// the lighter `flaky` / `persistent` projections the UI uses, so an
+// agent doesn't need to recompute them from runs[].
 
-import { DataReader, HistoryRecord } from "@vitest-agent/sdk";
+import { DataReader } from "@vitest-agent/engine";
+import { HistoryRecord } from "@vitest-agent/sdk";
 import { Effect, Schema, SchemaGetter } from "effect";
-import { publicProcedure } from "../context.js";
+import { Tool } from "effect/unstable/ai";
+import { RenderText } from "../annotations.js";
 
 const FlakyTestRow = Schema.Struct({
 	fullName: Schema.String.annotate({ description: "Full hierarchical test name (`describe > it`)." }),
@@ -59,6 +57,11 @@ const RecoveredTestRow = Schema.Struct({
 	description: "A test whose latest run passed after the previous one failed.",
 });
 
+/**
+ * The `test_history` tool's success payload.
+ *
+ * @public
+ */
 export const TestHistoryResult = Schema.Struct({
 	project: Schema.String.annotate({ description: "Workspace project key the history was computed for." }),
 	hasData: Schema.Boolean.annotate({
@@ -75,6 +78,11 @@ export const TestHistoryResult = Schema.Struct({
 	title: "test_history result",
 	description: "Per-project flaky/persistent/recovered test classifications computed from `test_runs` history.",
 });
+/**
+ * The decoded {@link TestHistoryResult}.
+ *
+ * @public
+ */
 export type TestHistoryResultType = Schema.Schema.Type<typeof TestHistoryResult>;
 
 export const formatTestHistoryMarkdown = (data: TestHistoryResultType): string => {
@@ -141,93 +149,122 @@ export const TestHistoryAsMarkdown = TestHistoryResult.pipe(
 	}),
 );
 
-export const testHistory = publicProcedure
-	.input(
-		Schema.toStandardSchemaV1(
-			Schema.Struct({
-				project: Schema.String,
-				testName: Schema.optional(Schema.String).annotate({
-					description: "Exact full_name match — narrows to a single test's history.",
-				}),
-				modulePath: Schema.optional(Schema.String).annotate({
-					description: "Exact module_path match — narrows to tests in one file.",
-				}),
-				// A non-positive or fractional limit used to flow straight
-				// into the `rn <= limit` window predicate and silently
-				// return an empty history — indistinguishable from "this
-				// test has never run". Reject it at the input boundary
-				// instead (issue #243).
-				limit: Schema.optional(
-					Schema.Int.check(Schema.isGreaterThan(0)).annotate({
-						description: "Max runs kept per test, most-recent-first. Must be a positive integer. Default 20.",
-					}),
-				),
-			}),
-		),
-	)
-	.query(
-		async ({ ctx, input }): Promise<TestHistoryResultType> =>
-			ctx.runtime.runPromise(
-				Effect.gen(function* () {
-					const reader = yield* DataReader;
-					// `testName` / `modulePath` scope every section, not just
-					// `history` — a scoped call that still returned the whole
-					// project's flaky/persistent classifications (and a
-					// `hasData: true` derived from them) told the agent the
-					// requested test had history when it had none (issue #243).
-					const scopeOptions = {
-						...(input.testName !== undefined && { testName: input.testName }),
-						...(input.modulePath !== undefined && { modulePath: input.modulePath }),
-					};
-					const historyOptions = {
-						...scopeOptions,
-						...(input.limit !== undefined && { limit: input.limit }),
-					};
-					// Effect.all defaults to sequential execution. Keep concurrency
-					// explicit so the three independent reads schedule together.
-					const [history, flaky, persistent] = yield* Effect.all(
-						[
-							reader.getHistory(input.project, historyOptions),
-							reader.getFlaky(input.project, scopeOptions),
-							reader.getPersistentFailures(input.project, scopeOptions),
-						],
-						{ concurrency: "unbounded" },
-					);
+/**
+ * The `test_history` tool's parameters.
+ *
+ * @public
+ */
+export const TestHistoryInput = Schema.Struct({
+	project: Schema.String.annotate({ description: "Project name (required)" }),
+	testName: Schema.optionalKey(Schema.String).annotate({
+		description: "Exact full_name match — narrows to a single test's history.",
+	}),
+	modulePath: Schema.optionalKey(Schema.String).annotate({
+		description: "Exact module_path match — narrows to tests in one file.",
+	}),
+	// A non-positive or fractional limit used to flow straight
+	// into the `rn <= limit` window predicate and silently
+	// return an empty history — indistinguishable from "this
+	// test has never run". Reject it at the input boundary
+	// instead (issue #243).
+	limit: Schema.optionalKey(
+		Schema.Int.check(Schema.isGreaterThan(0)).annotate({
+			description: "Max runs kept per test, most-recent-first. Must be a positive integer. Default 20.",
+		}),
+	),
+});
+/**
+ * The decoded {@link TestHistoryInput}.
+ *
+ * @public
+ */
+export type TestHistoryInputType = Schema.Schema.Type<typeof TestHistoryInput>;
 
-					// t.runs is ordered most-recent-first (see classifyTest's documented
-					// "priorRuns" convention), so the current/most recent run is
-					// runs[0] and the one before it is runs[1].
-					const recovered = history.tests
-						.filter((t) => {
-							const runs = t.runs;
-							if (runs.length < 2) return false;
-							const mostRecent = runs[0];
-							const previous = runs[1];
-							return (
-								mostRecent !== undefined &&
-								previous !== undefined &&
-								mostRecent.state === "passed" &&
-								previous.state === "failed"
-							);
-						})
-						.map((t) => ({
-							modulePath: t.modulePath,
-							fullName: t.fullName,
-							recentRuns: t.runs
-								.slice(0, 10)
-								.reverse()
-								.map((r) => r.state),
-						}));
+/**
+ * Handler for {@link testHistoryTool}.
+ *
+ * @public
+ */
+export const handleTestHistory = (
+	input: TestHistoryInputType,
+): Effect.Effect<TestHistoryResultType, never, DataReader> =>
+	Effect.gen(function* () {
+		const reader = yield* DataReader;
+		// `testName` / `modulePath` scope every section, not just
+		// `history` — a scoped call that still returned the whole
+		// project's flaky/persistent classifications (and a
+		// `hasData: true` derived from them) told the agent the
+		// requested test had history when it had none (issue #243).
+		const scopeOptions = {
+			...(input.testName !== undefined && { testName: input.testName }),
+			...(input.modulePath !== undefined && { modulePath: input.modulePath }),
+		};
+		const historyOptions = {
+			...scopeOptions,
+			...(input.limit !== undefined && { limit: input.limit }),
+		};
+		// Effect.all defaults to sequential execution. Keep concurrency
+		// explicit so the three independent reads schedule together.
+		const [history, flaky, persistent] = yield* Effect.all(
+			[
+				reader.getHistory(input.project, historyOptions),
+				reader.getFlaky(input.project, scopeOptions),
+				reader.getPersistentFailures(input.project, scopeOptions),
+			],
+			{ concurrency: "unbounded" },
+		);
 
-					const hasData = history.tests.length > 0 || flaky.length > 0 || persistent.length > 0;
-					return {
-						project: input.project,
-						hasData,
-						history,
-						flaky,
-						persistent,
-						recovered,
-					};
-				}),
-			),
-	);
+		// t.runs is ordered most-recent-first (see classifyTest's documented
+		// "priorRuns" convention), so the current/most recent run is
+		// runs[0] and the one before it is runs[1].
+		const recovered = history.tests
+			.filter((t) => {
+				const runs = t.runs;
+				if (runs.length < 2) return false;
+				const mostRecent = runs[0];
+				const previous = runs[1];
+				return (
+					mostRecent !== undefined &&
+					previous !== undefined &&
+					mostRecent.state === "passed" &&
+					previous.state === "failed"
+				);
+			})
+			.map((t) => ({
+				modulePath: t.modulePath,
+				fullName: t.fullName,
+				recentRuns: t.runs
+					.slice(0, 10)
+					.reverse()
+					.map((r) => r.state),
+			}));
+
+		const hasData = history.tests.length > 0 || flaky.length > 0 || persistent.length > 0;
+		return {
+			project: input.project,
+			hasData,
+			history,
+			flaky,
+			persistent,
+			recovered,
+		};
+	}).pipe(Effect.orDie);
+
+/**
+ * The Effect-native `test_history` tool.
+ *
+ * @public
+ */
+export const testHistoryTool = Tool.make("test_history", {
+	description:
+		"Use when failures recur and you need flaky, persistent, and recovered test classifications. Returns markdown in content[] and a typed JSON object in structuredContent (project, hasData, history, flaky[], persistent[], recovered[]). Optional testName/modulePath narrow to a single test; limit caps runs kept per test (default 20) — omit all three only when you actually need the whole project's history.",
+	parameters: TestHistoryInput,
+	success: TestHistoryResult,
+	dependencies: [DataReader],
+})
+	.annotate(Tool.Title, "Test history")
+	.annotate(Tool.Readonly, true)
+	.annotate(Tool.Destructive, false)
+	.annotate(Tool.OpenWorld, false)
+	.annotate(Tool.Idempotent, true)
+	.annotate(RenderText, (encoded) => formatTestHistoryMarkdown(encoded as TestHistoryResultType));

@@ -2,7 +2,7 @@
  * Integration tests for the T2 tag-filtering MCP surface.
  *
  * Seeds a multi-tag fixture into the persistence layer, then walks the
- * three new tool surfaces end-to-end via the tRPC caller:
+ * three new tool surfaces end-to-end via the direct handler caller:
  *   inventory({ kind: "tag" })        — scoped + unscoped pivots
  *   test({ action: "for_tag" })       — per-project grouping
  *
@@ -12,14 +12,14 @@
  * Vitest spawn is verified by manual smoke run).
  */
 
-import { DataStore } from "@vitest-agent/sdk";
+import { DataStore } from "@vitest-agent/engine";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
-import type { McpContext } from "../../src/context.js";
-import { createCallerFactory, createCurrentSessionIdRef, createSessionContextRef } from "../../src/context.js";
-import { appRouter } from "../../src/router.js";
 import type { InventoryResultType } from "../../src/tools/inventory.js";
 import type { TestResultType } from "../../src/tools/test.js";
+import type { ToolParams } from "../utils/caller.js";
+import { makeCaller as makeToolCaller } from "../utils/caller.js";
+import type { McpRuntime } from "./utils/fixtures.js";
 import { test as base } from "./utils/fixtures.js";
 
 const settingsInput = {
@@ -125,13 +125,13 @@ const test = base.extend<{ seeded: true }>({
 	],
 });
 
-const makeCaller = (runtime: unknown) =>
-	createCallerFactory(appRouter)({
-		runtime: runtime as McpContext["runtime"],
-		cwd: process.cwd(),
-		currentSessionId: createCurrentSessionIdRef(null),
-		sessionContext: createSessionContextRef(),
-	});
+const makeCaller = (runtime: McpRuntime) => {
+	const call = makeToolCaller(runtime);
+	return {
+		inventory: (params: ToolParams<"inventory">) => call("inventory", params),
+		test: (params: ToolParams<"test">) => call("test", params),
+	};
+};
 
 describe("T2 tag-filtering MCP surface — integration", () => {
 	test("inventory({ kind: 'tag' }) unscoped pivots flat reader rows into a per-tag breakdown", async ({

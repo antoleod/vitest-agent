@@ -8,9 +8,11 @@
  * `list_by_tdd_task`).
  */
 
-import { BehaviorDetail, BehaviorRow, DataReader, DataStore } from "@vitest-agent/sdk";
+import { DataReader, DataStore } from "@vitest-agent/engine";
+import { BehaviorDetail, BehaviorRow } from "@vitest-agent/sdk";
 import { Effect, Match, Option, Schema } from "effect";
-import { idempotentProcedure } from "../middleware/idempotency.js";
+import { Tool } from "effect/unstable/ai";
+import { IdempotentReplayMarker } from "../utils/replay-marker.js";
 import { catchTddErrorsAsEnvelope } from "./_tdd-error-envelope.js";
 
 const BehaviorStatus = Schema.Literals(["pending", "in_progress", "done", "abandoned"]);
@@ -22,8 +24,13 @@ const TddBehaviorErrorEnvelope = Schema.Struct({
 			_tag: Schema.String.annotate({
 				description: "Tagged error name (e.g. BehaviorNotFoundError, GoalNotFoundError).",
 			}),
-			message: Schema.String,
-			remediation: Schema.optional(Schema.String),
+			remediation: Schema.Struct({
+				suggestedTool: Schema.String,
+				suggestedArgs: Schema.Record(Schema.String, Schema.Unknown),
+				humanHint: Schema.String,
+			}).annotate({
+				description: "Suggested next action: the tool to call, its arguments, and a plain-language hint.",
+			}),
 		}),
 		[Schema.Record(Schema.String, Schema.Unknown)],
 	),
@@ -33,6 +40,7 @@ const TddBehaviorCreateOk = Schema.Struct({
 	ok: Schema.Literal(true),
 	action: Schema.Literal("create"),
 	behavior: BehaviorRow.annotate({ description: "Newly inserted behavior row." }),
+	...IdempotentReplayMarker,
 });
 
 const TddBehaviorUpdateOk = Schema.Struct({
@@ -87,45 +95,56 @@ export const TddBehaviorResult = Schema.Union([
 	title: "tdd_behavior result",
 	description: "Discriminate on `action` (or `ok=false` for the tagged-error envelope).",
 });
+/**
+ * The decoded {@link TddBehaviorResult}.
+ *
+ * @public
+ */
+export type TddBehaviorResultType = Schema.Schema.Type<typeof TddBehaviorResult>;
 
 const CreateVariant = Schema.Struct({
-	action: Schema.Literal("create"),
-	goalId: Schema.Number,
+	action: Schema.Literal("create").annotate({ description: "CRUD discriminator" }),
+	goalId: Schema.Finite,
 	behavior: Schema.String,
-	suggestedTestName: Schema.optional(Schema.String),
-	dependsOnBehaviorIds: Schema.optional(Schema.Array(Schema.Number)),
+	suggestedTestName: Schema.optionalKey(Schema.String),
+	dependsOnBehaviorIds: Schema.optionalKey(Schema.Array(Schema.Finite)),
 });
 
 const UpdateVariant = Schema.Struct({
-	action: Schema.Literal("update"),
-	id: Schema.Number,
-	behavior: Schema.optional(Schema.String),
-	suggestedTestName: Schema.optional(Schema.NullOr(Schema.String)),
-	status: Schema.optional(BehaviorStatus),
-	dependsOnBehaviorIds: Schema.optional(Schema.Array(Schema.Number)),
+	action: Schema.Literal("update").annotate({ description: "CRUD discriminator" }),
+	id: Schema.Finite,
+	behavior: Schema.optionalKey(Schema.String),
+	suggestedTestName: Schema.optionalKey(Schema.NullOr(Schema.String)),
+	status: Schema.optionalKey(BehaviorStatus),
+	dependsOnBehaviorIds: Schema.optionalKey(Schema.Array(Schema.Finite)),
 });
 
 const DeleteVariant = Schema.Struct({
-	action: Schema.Literal("delete"),
-	id: Schema.Number,
+	action: Schema.Literal("delete").annotate({ description: "CRUD discriminator" }),
+	id: Schema.Finite,
 });
 
 const GetVariant = Schema.Struct({
-	action: Schema.Literal("get"),
-	id: Schema.Number,
+	action: Schema.Literal("get").annotate({ description: "CRUD discriminator" }),
+	id: Schema.Finite,
 });
 
 const ListByGoalVariant = Schema.Struct({
-	action: Schema.Literal("list_by_goal"),
-	goalId: Schema.Number,
+	action: Schema.Literal("list_by_goal").annotate({ description: "CRUD discriminator" }),
+	goalId: Schema.Finite,
 });
 
 const ListByTddTaskVariant = Schema.Struct({
-	action: Schema.Literal("list_by_tdd_task"),
-	tddTaskId: Schema.Number,
+	action: Schema.Literal("list_by_tdd_task").annotate({ description: "CRUD discriminator" }),
+	tddTaskId: Schema.Finite,
 });
 
-const TddBehaviorInput = Schema.Union([
+/**
+ * The `tdd_behavior` tool's parameters — a union discriminated on `action`.
+ *
+ * @public
+ */
+export const TddBehaviorInput = Schema.Union([
 	CreateVariant,
 	UpdateVariant,
 	DeleteVariant,
@@ -133,11 +152,17 @@ const TddBehaviorInput = Schema.Union([
 	ListByGoalVariant,
 	ListByTddTaskVariant,
 ]);
+/**
+ * The decoded {@link TddBehaviorInput}.
+ *
+ * @public
+ */
+export type TddBehaviorInputType = Schema.Schema.Type<typeof TddBehaviorInput>;
 
 /**
- * Single source of truth for the `tdd_behavior` tool's `action`
- * discriminant, consumed by `server.ts`'s served `z.enum(...)` so the
- * MCP-SDK-side registration cannot drift from this tRPC input union
+ * Single source of truth for the `tdd_behavior` tool's `action` discriminant.
+ * `served-enum-drift.test.ts` asserts the served `oneOf` members match
+ * this tuple exactly, so the wire enum cannot drift from the input union
  * (issue #335).
  */
 export const TDD_BEHAVIOR_ACTIONS = ["create", "update", "delete", "get", "list_by_goal", "list_by_tdd_task"] as const;
@@ -150,90 +175,113 @@ type _AssertTddBehaviorActions = TddBehaviorAction extends (typeof TDD_BEHAVIOR_
 const _assertTddBehaviorActions: _AssertTddBehaviorActions = true;
 void _assertTddBehaviorActions;
 
-export const tddBehavior = idempotentProcedure
-	.input(Schema.toStandardSchemaV1(TddBehaviorInput))
-	.mutation(async ({ ctx, input }) => {
-		return ctx.runtime.runPromise(
-			Match.value(input).pipe(
-				Match.discriminatorsExhaustive("action")({
-					create: (variant) =>
-						catchTddErrorsAsEnvelope(
-							Effect.gen(function* () {
-								const store = yield* DataStore;
-								const behavior = yield* store.createBehavior({
-									goalId: variant.goalId,
-									behavior: variant.behavior,
-									...(variant.suggestedTestName !== undefined && { suggestedTestName: variant.suggestedTestName }),
-									...(variant.dependsOnBehaviorIds !== undefined && {
-										dependsOnBehaviorIds: variant.dependsOnBehaviorIds,
-									}),
-								});
-								return { ok: true as const, action: "create" as const, behavior };
-							}),
-						),
-					update: (variant) =>
-						catchTddErrorsAsEnvelope(
-							Effect.gen(function* () {
-								const store = yield* DataStore;
-								const behavior = yield* store.updateBehavior({
-									id: variant.id,
-									...(variant.behavior !== undefined && { behavior: variant.behavior }),
-									...(variant.suggestedTestName !== undefined && { suggestedTestName: variant.suggestedTestName }),
-									...(variant.status !== undefined && { status: variant.status }),
-									...(variant.dependsOnBehaviorIds !== undefined && {
-										dependsOnBehaviorIds: variant.dependsOnBehaviorIds,
-									}),
-								});
-								return { ok: true as const, action: "update" as const, behavior };
-							}),
-						),
-					delete: (variant) =>
-						catchTddErrorsAsEnvelope(
-							Effect.gen(function* () {
-								const store = yield* DataStore;
-								yield* store.deleteBehavior(variant.id);
-								return { ok: true as const, action: "delete" as const, id: variant.id };
-							}),
-						),
-					get: (variant) =>
+/**
+ * Handler for {@link tddBehaviorTool}. The five tagged TDD errors come
+ * back as the `{ ok: false, error }` envelope; anything else is a defect.
+ *
+ * @public
+ */
+export const handleTddBehavior = (
+	input: TddBehaviorInputType,
+): Effect.Effect<TddBehaviorResultType, never, DataReader | DataStore> =>
+	Match.value(input)
+		.pipe(
+			Match.discriminatorsExhaustive("action")({
+				create: (variant) =>
+					catchTddErrorsAsEnvelope(
 						Effect.gen(function* () {
-							const reader = yield* DataReader;
-							const opt = yield* reader.getBehaviorById(variant.id);
-							return Option.isNone(opt)
-								? { action: "get" as const, found: false as const, id: variant.id }
-								: { action: "get" as const, found: true as const, behavior: opt.value };
+							const store = yield* DataStore;
+							const behavior = yield* store.createBehavior({
+								goalId: variant.goalId,
+								behavior: variant.behavior,
+								...(variant.suggestedTestName !== undefined && { suggestedTestName: variant.suggestedTestName }),
+								...(variant.dependsOnBehaviorIds !== undefined && {
+									dependsOnBehaviorIds: variant.dependsOnBehaviorIds,
+								}),
+							});
+							return { ok: true as const, action: "create" as const, behavior };
 						}),
-					list_by_goal: (variant) =>
-						catchTddErrorsAsEnvelope(
-							Effect.gen(function* () {
-								const store = yield* DataStore;
-								const reader = yield* DataReader;
-								yield* store.listBehaviorsByGoal(variant.goalId);
-								const behaviors = yield* reader.getBehaviorsByGoal(variant.goalId);
-								return {
-									ok: true as const,
-									action: "list_by_goal" as const,
-									goalId: variant.goalId,
-									behaviors,
-								};
-							}),
-						),
-					list_by_tdd_task: (variant) =>
-						catchTddErrorsAsEnvelope(
-							Effect.gen(function* () {
-								const store = yield* DataStore;
-								const reader = yield* DataReader;
-								yield* store.listBehaviorsByTddTask(variant.tddTaskId);
-								const behaviors = yield* reader.getBehaviorsByTddTask(variant.tddTaskId);
-								return {
-									ok: true as const,
-									action: "list_by_tdd_task" as const,
-									tddTaskId: variant.tddTaskId,
-									behaviors,
-								};
-							}),
-						),
-				}),
-			),
-		);
-	});
+					),
+				update: (variant) =>
+					catchTddErrorsAsEnvelope(
+						Effect.gen(function* () {
+							const store = yield* DataStore;
+							const behavior = yield* store.updateBehavior({
+								id: variant.id,
+								...(variant.behavior !== undefined && { behavior: variant.behavior }),
+								...(variant.suggestedTestName !== undefined && { suggestedTestName: variant.suggestedTestName }),
+								...(variant.status !== undefined && { status: variant.status }),
+								...(variant.dependsOnBehaviorIds !== undefined && {
+									dependsOnBehaviorIds: variant.dependsOnBehaviorIds,
+								}),
+							});
+							return { ok: true as const, action: "update" as const, behavior };
+						}),
+					),
+				delete: (variant) =>
+					catchTddErrorsAsEnvelope(
+						Effect.gen(function* () {
+							const store = yield* DataStore;
+							yield* store.deleteBehavior(variant.id);
+							return { ok: true as const, action: "delete" as const, id: variant.id };
+						}),
+					),
+				get: (variant) =>
+					Effect.gen(function* () {
+						const reader = yield* DataReader;
+						const opt = yield* reader.getBehaviorById(variant.id);
+						return Option.isNone(opt)
+							? { action: "get" as const, found: false as const, id: variant.id }
+							: { action: "get" as const, found: true as const, behavior: opt.value };
+					}),
+				list_by_goal: (variant) =>
+					catchTddErrorsAsEnvelope(
+						Effect.gen(function* () {
+							const store = yield* DataStore;
+							const reader = yield* DataReader;
+							yield* store.listBehaviorsByGoal(variant.goalId);
+							const behaviors = yield* reader.getBehaviorsByGoal(variant.goalId);
+							return {
+								ok: true as const,
+								action: "list_by_goal" as const,
+								goalId: variant.goalId,
+								behaviors,
+							};
+						}),
+					),
+				list_by_tdd_task: (variant) =>
+					catchTddErrorsAsEnvelope(
+						Effect.gen(function* () {
+							const store = yield* DataStore;
+							const reader = yield* DataReader;
+							yield* store.listBehaviorsByTddTask(variant.tddTaskId);
+							const behaviors = yield* reader.getBehaviorsByTddTask(variant.tddTaskId);
+							return {
+								ok: true as const,
+								action: "list_by_tdd_task" as const,
+								tddTaskId: variant.tddTaskId,
+								behaviors,
+							};
+						}),
+					),
+			}),
+		)
+		.pipe(Effect.orDie);
+
+/**
+ * The Effect-native `tdd_behavior` tool.
+ *
+ * @public
+ */
+export const tddBehaviorTool = Tool.make("tdd_behavior", {
+	description:
+		"Use to manage TDD behaviors, with a CRUD action discriminator: action='create' (goalId, behavior, suggestedTestName?, dependsOnBehaviorIds?) is idempotent on (goalId, behavior); action='update' (id, ...patch) edits; action='delete' (id) hard-deletes; action='get' (id) reads; action='list_by_goal' (goalId) lists one goal's behaviors; action='list_by_tdd_task' (tddTaskId) lists across all goals.",
+	parameters: TddBehaviorInput,
+	success: TddBehaviorResult,
+	dependencies: [DataReader, DataStore],
+})
+	.annotate(Tool.Title, "TDD behavior")
+	.annotate(Tool.Readonly, false)
+	.annotate(Tool.Destructive, true)
+	.annotate(Tool.OpenWorld, false)
+	.annotate(Tool.Idempotent, false);

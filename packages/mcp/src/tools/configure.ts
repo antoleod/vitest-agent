@@ -1,12 +1,9 @@
-/**
- * `configure` MCP tool — Schema-driven implementation.
- *
- * @packageDocumentation
- */
+// `configure` MCP tool — Schema-driven implementation.
 
-import { DataReader } from "@vitest-agent/sdk";
+import { DataReader } from "@vitest-agent/engine";
 import { Effect, Option, Schema, SchemaGetter } from "effect";
-import { publicProcedure } from "../context.js";
+import { Tool } from "effect/unstable/ai";
+import { RenderText } from "../annotations.js";
 
 const SettingsRowSchema = Schema.Struct({
 	hash: Schema.String.annotate({
@@ -53,11 +50,21 @@ const SettingsAbsent = Schema.Struct({
 	}),
 }).annotate({ identifier: "ConfigureAbsent" });
 
+/**
+ * The `configure` tool's success payload.
+ *
+ * @public
+ */
 export const ConfigureResult = Schema.Union([SettingsFound, SettingsAbsent]).annotate({
 	identifier: "ConfigureResult",
 	title: "configure result",
 	description: "Captured Vitest settings for a run, or an absence record when the lookup found nothing.",
 });
+/**
+ * The decoded {@link ConfigureResult}.
+ *
+ * @public
+ */
 export type ConfigureResultType = Schema.Schema.Type<typeof ConfigureResult>;
 
 const formatSettings = (s: Schema.Schema.Type<typeof SettingsRowSchema>): string => {
@@ -103,27 +110,62 @@ export const ConfigureAsMarkdown = ConfigureResult.pipe(
 	}),
 );
 
-export const configure = publicProcedure
-	.input(Schema.toStandardSchemaV1(Schema.Struct({ settingsHash: Schema.optional(Schema.String) })))
-	.query(
-		async ({ ctx, input }): Promise<ConfigureResultType> =>
-			ctx.runtime.runPromise(
-				Effect.gen(function* () {
-					const reader = yield* DataReader;
-					if (input.settingsHash === undefined) {
-						const latestOpt = yield* reader.getLatestSettings();
-						return Option.isNone(latestOpt)
-							? { found: false as const, source: "latest" as const }
-							: { found: true as const, source: "latest" as const, settings: latestOpt.value };
-					}
-					const settingsOpt = yield* reader.getSettings(input.settingsHash);
-					return Option.isNone(settingsOpt)
-						? {
-								found: false as const,
-								source: "requested" as const,
-								requestedHash: input.settingsHash,
-							}
-						: { found: true as const, source: "requested" as const, settings: settingsOpt.value };
-				}),
-			),
-	);
+/**
+ * The `configure` tool's parameters.
+ *
+ * @public
+ */
+export const ConfigureInput = Schema.Struct({
+	settingsHash: Schema.optionalKey(Schema.String).annotate({
+		description: "Settings hash from a manifest entry or test run",
+	}),
+});
+/**
+ * The decoded {@link ConfigureInput}.
+ *
+ * @public
+ */
+export type ConfigureInputType = Schema.Schema.Type<typeof ConfigureInput>;
+
+/**
+ * Handler for {@link configureTool}.
+ *
+ * @public
+ */
+export const handleConfigure = (input: ConfigureInputType): Effect.Effect<ConfigureResultType, never, DataReader> =>
+	Effect.gen(function* () {
+		const reader = yield* DataReader;
+		if (input.settingsHash === undefined) {
+			const latestOpt = yield* reader.getLatestSettings();
+			return Option.isNone(latestOpt)
+				? { found: false as const, source: "latest" as const }
+				: { found: true as const, source: "latest" as const, settings: latestOpt.value };
+		}
+		const settingsOpt = yield* reader.getSettings(input.settingsHash);
+		return Option.isNone(settingsOpt)
+			? {
+					found: false as const,
+					source: "requested" as const,
+					requestedHash: input.settingsHash,
+				}
+			: { found: true as const, source: "requested" as const, settings: settingsOpt.value };
+	}).pipe(Effect.orDie);
+
+/**
+ * The Effect-native `configure` tool.
+ *
+ * @public
+ */
+export const configureTool = Tool.make("configure", {
+	description:
+		"Use when you need the captured Vitest settings for a test run. Returns markdown in content[] and a typed JSON object in structuredContent ({ found, source, settings?, requestedHash? }).",
+	parameters: ConfigureInput,
+	success: ConfigureResult,
+	dependencies: [DataReader],
+})
+	.annotate(Tool.Title, "Configure")
+	.annotate(Tool.Readonly, true)
+	.annotate(Tool.Destructive, false)
+	.annotate(Tool.OpenWorld, false)
+	.annotate(Tool.Idempotent, true)
+	.annotate(RenderText, (encoded) => formatConfigureMarkdown(encoded as ConfigureResultType));

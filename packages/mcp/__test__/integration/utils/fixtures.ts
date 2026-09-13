@@ -1,17 +1,17 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DataReader, DataStore, OutputRenderer, ProjectDiscovery } from "@vitest-agent/sdk";
-import { OutputPipelineLive, ProjectDiscoveryTest } from "@vitest-agent/sdk";
-import { makeTestLayer } from "@vitest-agent/sdk/testing";
+import type { DataReader, DataStore, OutputRenderer, ProjectDiscovery } from "@vitest-agent/engine";
+import { OutputPipelineLive, ProjectDiscoveryTest } from "@vitest-agent/engine";
+import { makeTestLayer } from "@vitest-agent/engine/testing";
 import { Layer, ManagedRuntime } from "effect";
 import type { SqlClient } from "effect/unstable/sql/SqlClient";
 import { test as base } from "vitest";
 
-// Superset of McpContext.runtime — adds SqlClient so tests can do raw SQL
-// assertions while the cast to McpContext["runtime"] still works for the caller.
+// Superset of the tool handlers' requirements — adds SqlClient so tests can
+// do raw SQL assertions while `makeCaller(runtime)` still accepts it.
 // Uses only well-structured package imports so tsgo can name the type.
-type McpRuntime = ManagedRuntime.ManagedRuntime<
+export type McpRuntime = ManagedRuntime.ManagedRuntime<
 	DataReader | DataStore | ProjectDiscovery | OutputRenderer | typeof SqlClient.Service,
 	never
 >;
@@ -26,7 +26,7 @@ export const test = base
 	.extend("runtime", { scope: "file" }, async ({ tmpDir }, { onCleanup }): Promise<McpRuntime> => {
 		const McpTestLayer = Layer.mergeAll(
 			makeTestLayer(join(tmpDir, "data.db")),
-			OutputPipelineLive,
+			OutputPipelineLive(process.env),
 			ProjectDiscoveryTest.layer([]),
 		);
 		const rt = ManagedRuntime.make(McpTestLayer);

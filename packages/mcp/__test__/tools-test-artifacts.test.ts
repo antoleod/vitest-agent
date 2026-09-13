@@ -10,30 +10,18 @@
  * never hand an agent a wall of bytes.
  */
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { DataStore, OutputPipelineLive, ProjectDiscoveryTest } from "@vitest-agent/sdk";
+import { DataStore, OutputPipelineLive, ProjectDiscoveryTest } from "@vitest-agent/engine";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { McpContext } from "../src/context.js";
-import { createCallerFactory, createCurrentSessionIdRef, createSessionContextRef } from "../src/context.js";
-import { appRouter } from "../src/router.js";
-import { buildMcpServer } from "../src/server.js";
 import { formatTestMarkdown } from "../src/tools/test.js";
+import { makeCaller } from "./utils/caller.js";
+import { makeHarness } from "./utils/harness.js";
 import { DataStoreTestLayer } from "./utils/layers.js";
 
-const TestLayer = Layer.mergeAll(DataStoreTestLayer, OutputPipelineLive, ProjectDiscoveryTest.layer([]));
+const TestLayer = Layer.mergeAll(DataStoreTestLayer, OutputPipelineLive(process.env), ProjectDiscoveryTest.layer([]));
 const testRuntime = ManagedRuntime.make(TestLayer);
 
-const makeCaller = () => {
-	const factory = createCallerFactory(appRouter);
-	return factory({
-		runtime: testRuntime as unknown as McpContext["runtime"],
-		cwd: process.cwd(),
-		currentSessionId: createCurrentSessionIdRef(),
-		sessionContext: createSessionContextRef(),
-	});
-};
+const caller = makeCaller(testRuntime);
 
 afterAll(async () => {
 	await testRuntime.dispose();
@@ -46,64 +34,60 @@ const ERROR_PROJECT = "anno-errors";
 const ERROR_MODULE = "src/failing.test.ts";
 const ERROR_FULL_NAME = "failing > blows up";
 
-const seedFixture = async () => {
-	await testRuntime.runPromise(
-		Effect.gen(function* () {
-			const store = yield* DataStore;
-			yield* store.writeSettings("anno-hash", { vitestVersion: "5.0.0" }, {});
-			const runId = yield* store.writeRun({
-				invocationId: "anno-inv",
-				project: PROJECT,
-				settingsHash: "anno-hash",
-				timestamp: "2026-09-07T00:00:00.000Z",
-				commitSha: null,
-				branch: null,
-				reason: "passed" as const,
-				duration: 10,
-				total: 1,
-				passed: 1,
-				failed: 0,
-				skipped: 0,
-				scoped: false,
-			});
-			const fileId = yield* store.ensureFile(MODULE);
-			const [moduleId] = yield* store.writeModules(runId, [
-				{ fileId, relativeModuleId: MODULE, state: "passed", duration: 5 },
-			]);
-			const [testCaseId] = yield* store.writeTestCases(moduleId, [
-				{ name: "works", fullName: FULL_NAME, state: "passed" },
-			]);
-			yield* store.writeAnnotations(runId, [
-				{
-					testCaseId,
-					type: "issues",
-					message: "known slow under CI",
-					locationFile: MODULE,
-					locationLine: 12,
-					locationColumn: 3,
-					attachments: [
-						{ contentType: "text/plain", body: "aaaa", bodyEncoding: "utf-8", byteSize: 4 },
-						{ contentType: "text/plain", body: "bbbb", bodyEncoding: "utf-8", byteSize: 4 },
-					],
-				},
-			]);
-			const big = "x".repeat(70_000);
-			yield* store.writeArtifacts(runId, [
-				{
-					testCaseId,
-					type: "my-pkg:trace",
-					message: "trace captured",
-					data: JSON.stringify({ spans: 2 }),
-					attachments: [
-						{ contentType: "image/png", path: ".vitest/attachments/s.png", byteSize: 2048 },
-						{ contentType: "text/plain", body: big, bodyEncoding: "utf-8", byteSize: big.length },
-						{ contentType: "text/plain", body: "hello", bodyEncoding: "utf-8", byteSize: 5 },
-					],
-				},
-			]);
-		}),
-	);
-};
+const seedFixtureEffect = Effect.gen(function* () {
+	const store = yield* DataStore;
+	yield* store.writeSettings("anno-hash", { vitestVersion: "5.0.0" }, {});
+	const runId = yield* store.writeRun({
+		invocationId: "anno-inv",
+		project: PROJECT,
+		settingsHash: "anno-hash",
+		timestamp: "2026-09-07T00:00:00.000Z",
+		commitSha: null,
+		branch: null,
+		reason: "passed" as const,
+		duration: 10,
+		total: 1,
+		passed: 1,
+		failed: 0,
+		skipped: 0,
+		scoped: false,
+	});
+	const fileId = yield* store.ensureFile(MODULE);
+	const [moduleId] = yield* store.writeModules(runId, [
+		{ fileId, relativeModuleId: MODULE, state: "passed", duration: 5 },
+	]);
+	const [testCaseId] = yield* store.writeTestCases(moduleId, [{ name: "works", fullName: FULL_NAME, state: "passed" }]);
+	yield* store.writeAnnotations(runId, [
+		{
+			testCaseId,
+			type: "issues",
+			message: "known slow under CI",
+			locationFile: MODULE,
+			locationLine: 12,
+			locationColumn: 3,
+			attachments: [
+				{ contentType: "text/plain", body: "aaaa", bodyEncoding: "utf-8", byteSize: 4 },
+				{ contentType: "text/plain", body: "bbbb", bodyEncoding: "utf-8", byteSize: 4 },
+			],
+		},
+	]);
+	const big = "x".repeat(70_000);
+	yield* store.writeArtifacts(runId, [
+		{
+			testCaseId,
+			type: "my-pkg:trace",
+			message: "trace captured",
+			data: JSON.stringify({ spans: 2 }),
+			attachments: [
+				{ contentType: "image/png", path: ".vitest/attachments/s.png", byteSize: 2048 },
+				{ contentType: "text/plain", body: big, bodyEncoding: "utf-8", byteSize: big.length },
+				{ contentType: "text/plain", body: "hello", bodyEncoding: "utf-8", byteSize: 5 },
+			],
+		},
+	]);
+});
+
+const seedFixture = () => testRuntime.runPromise(seedFixtureEffect);
 
 /**
  * A second project whose latest run carries one test-scoped error on an
@@ -163,8 +147,7 @@ beforeAll(async () => {
 
 describe("test({ action: 'annotations' })", () => {
 	it("returns an empty, counted payload for a test that recorded nothing", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({ action: "annotations", fullName: "anno > absent", project: PROJECT });
+		const result = await caller("test", { action: "annotations", fullName: "anno > absent", project: PROJECT });
 		expect(result).toEqual({
 			action: "annotations",
 			project: PROJECT,
@@ -175,8 +158,7 @@ describe("test({ action: 'annotations' })", () => {
 	});
 
 	it("returns the recorded annotation with its type, message and location", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({ action: "annotations", fullName: FULL_NAME, project: PROJECT });
+		const result = await caller("test", { action: "annotations", fullName: FULL_NAME, project: PROJECT });
 		if (result.action !== "annotations") throw new Error("expected the annotations variant");
 		expect(result.count).toBe(1);
 		expect(result.annotations[0]?.type).toBe("issues");
@@ -185,8 +167,7 @@ describe("test({ action: 'annotations' })", () => {
 	});
 
 	it("scopes to a modulePath, returning nothing for a module the test does not live in", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({
+		const result = await caller("test", {
 			action: "annotations",
 			fullName: FULL_NAME,
 			project: PROJECT,
@@ -197,8 +178,7 @@ describe("test({ action: 'annotations' })", () => {
 	});
 
 	it("returns the row when the modulePath matches", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({
+		const result = await caller("test", {
 			action: "annotations",
 			fullName: FULL_NAME,
 			project: PROJECT,
@@ -211,8 +191,7 @@ describe("test({ action: 'annotations' })", () => {
 
 describe("test({ action: 'artifacts' })", () => {
 	it("returns attachment descriptors carrying path and byteSize and no inline body", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({ action: "artifacts", fullName: FULL_NAME, project: PROJECT });
+		const result = await caller("test", { action: "artifacts", fullName: FULL_NAME, project: PROJECT });
 		if (result.action !== "artifacts") throw new Error("expected the artifacts variant");
 		expect(result.count).toBe(1);
 		const artifact = result.artifacts[0];
@@ -233,8 +212,7 @@ describe("test({ action: 'artifacts' })", () => {
 	});
 
 	it("returns an empty, counted payload for a test that recorded nothing", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({ action: "artifacts", fullName: "anno > absent", project: PROJECT });
+		const result = await caller("test", { action: "artifacts", fullName: "anno > absent", project: PROJECT });
 		expect(result).toEqual({
 			action: "artifacts",
 			project: PROJECT,
@@ -247,8 +225,7 @@ describe("test({ action: 'artifacts' })", () => {
 
 describe("inline attachment bodies are gated behind maxBytes", () => {
 	it("omits every stored body by default", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({ action: "annotations", fullName: FULL_NAME, project: PROJECT });
+		const result = await caller("test", { action: "annotations", fullName: FULL_NAME, project: PROJECT });
 		if (result.action !== "annotations") throw new Error("expected the annotations variant");
 		const attachments = result.annotations[0]?.attachments ?? [];
 		expect(attachments).toHaveLength(2);
@@ -262,8 +239,7 @@ describe("inline attachment bodies are gated behind maxBytes", () => {
 	});
 
 	it("includes every body when the budget covers them all", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({
+		const result = await caller("test", {
 			action: "annotations",
 			fullName: FULL_NAME,
 			project: PROJECT,
@@ -277,10 +253,9 @@ describe("inline attachment bodies are gated behind maxBytes", () => {
 	});
 
 	it("spends the budget cumulatively: the first body fits, the second does not", async () => {
-		const caller = makeCaller();
 		// Each body is 4 bytes and the budget is 5: either one fits alone,
 		// but only the first fits once the running total is charged.
-		const result = await caller.test({
+		const result = await caller("test", {
 			action: "annotations",
 			fullName: FULL_NAME,
 			project: PROJECT,
@@ -295,8 +270,7 @@ describe("inline attachment bodies are gated behind maxBytes", () => {
 	});
 
 	it("gates artifact bodies through the same budget", async () => {
-		const caller = makeCaller();
-		const result = await caller.test({
+		const result = await caller("test", {
 			action: "artifacts",
 			fullName: FULL_NAME,
 			project: PROJECT,
@@ -313,8 +287,7 @@ describe("inline attachment bodies are gated behind maxBytes", () => {
 
 describe("test_errors carries the failing test's annotations", () => {
 	it("attaches the recorded annotations to the error row and leaves other scopes empty", async () => {
-		const caller = makeCaller();
-		const result = await caller.test_errors({ project: ERROR_PROJECT });
+		const result = await caller("test_errors", { project: ERROR_PROJECT });
 		expect(result.count).toBe(2);
 		const testScoped = result.errors.find((e) => e.scope === "test");
 		expect(testScoped?.annotations).toEqual([
@@ -326,47 +299,32 @@ describe("test_errors carries the failing test's annotations", () => {
 });
 
 describe("the served `test` tool reaches both new actions", () => {
-	const connect = async () => {
-		const server = buildMcpServer({
-			runtime: testRuntime as unknown as McpContext["runtime"],
-			cwd: process.cwd(),
-			currentSessionId: createCurrentSessionIdRef(),
-			sessionContext: createSessionContextRef(),
-		});
-		const client = new Client({ name: "tools-test-artifacts", version: "0.0.0" });
-		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-		await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-		return client;
-	};
+	interface CallToolResult {
+		isError?: boolean;
+		structuredContent?: Record<string, unknown>;
+		content: Array<{ type: string; text?: string }>;
+	}
+	const call = (args: Record<string, unknown>): Promise<CallToolResult> =>
+		Effect.runPromise(
+			Effect.scoped(
+				Effect.flatMap(makeHarness({ seed: seedFixtureEffect.pipe(Effect.orDie) }), (h) =>
+					h.initialize().pipe(Effect.andThen(h.callTool("test", args))),
+				),
+			),
+		) as Promise<CallToolResult>;
 
 	it("returns a valid structuredContent payload for action='artifacts'", async () => {
-		const client = await connect();
-		try {
-			const result = await client.callTool({
-				name: "test",
-				arguments: { action: "artifacts", fullName: FULL_NAME, project: PROJECT },
-			});
-			const text = (result.content as Array<{ text?: string }>).map((c) => c.text ?? "").join("\n");
-			expect(result.isError, text).toBeFalsy();
-			expect((result.structuredContent as { count?: number }).count).toBe(1);
-		} finally {
-			await client.close();
-		}
+		const result = await call({ action: "artifacts", fullName: FULL_NAME, project: PROJECT });
+		const text = result.content.map((c) => c.text ?? "").join("\n");
+		expect(result.isError, text).toBeFalsy();
+		expect(result.structuredContent?.count).toBe(1);
 	});
 
 	it("returns a valid structuredContent payload for action='annotations'", async () => {
-		const client = await connect();
-		try {
-			const result = await client.callTool({
-				name: "test",
-				arguments: { action: "annotations", fullName: FULL_NAME, project: PROJECT },
-			});
-			const text = (result.content as Array<{ text?: string }>).map((c) => c.text ?? "").join("\n");
-			expect(result.isError, text).toBeFalsy();
-			expect((result.structuredContent as { count?: number }).count).toBe(1);
-		} finally {
-			await client.close();
-		}
+		const result = await call({ action: "annotations", fullName: FULL_NAME, project: PROJECT });
+		const text = result.content.map((c) => c.text ?? "").join("\n");
+		expect(result.isError, text).toBeFalsy();
+		expect(result.structuredContent?.count).toBe(1);
 	});
 });
 

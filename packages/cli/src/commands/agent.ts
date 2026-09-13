@@ -33,25 +33,17 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { findWorkspaceRootSync, getWorkspacePackagesSync } from "@effected/workspaces";
 import { nodeSyncOps } from "@effected/workspaces/node-sync";
 import {
-	classifyTestPath,
-	detectNonDefaultDiscoverStrategy,
-	findOwningWorkspace,
+	SidecarPlatformLive,
+	endAgentEffect,
+	registerAgentEffect,
+	resolveHookPaths,
 	resolveProjectKeyFromCwd,
-} from "@vitest-agent/sdk";
+} from "@vitest-agent/engine";
+import { classifyTestPath, detectNonDefaultDiscoverStrategy, findOwningWorkspace } from "@vitest-agent/sdk";
 import { exitCodeForTag, injectEnv } from "@vitest-agent/sdk/dispatch";
 import { resolveSidecarBinaryPath } from "@vitest-agent/sidecar";
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { SidecarLive } from "../layers/SidecarLive.js";
-import { endAgentEffect } from "../lib/internal-end-agent.js";
-import { registerAgentEffect } from "../lib/internal-register-agent.js";
-import {
-	DATA_DB_FILENAME,
-	REGISTRY_DB_FILENAME,
-	resolveProjectDataDir,
-	resolveRegistryDir,
-	resolveSessionMapPath,
-} from "../lib/sidecar-paths.js";
 import { recordCommand } from "./record.js";
 import { triageCommand } from "./triage.js";
 import { wrapupCommand } from "./wrapup.js";
@@ -120,15 +112,8 @@ export const registerAgentSubcommand = Command.make(
 				? opts.projectKeyOverride.value
 				: resolveProjectKeyFromCwd(opts.cwd);
 
-			const perProjectDbPath = join(resolveProjectDataDir(projectKey), DATA_DB_FILENAME);
-			const registryDbPath = join(resolveRegistryDir(), REGISTRY_DB_FILENAME);
-			const sessionMapDbPath = yield* resolveSessionMapPath().pipe(Effect.catchCause(mapDefectToExit));
-
-			const sidecar = SidecarLive({
-				perProjectDbPath,
-				sessionMapDbPath,
-				registryDbPath,
-			});
+			const paths = yield* resolveHookPaths({ env: process.env, projectKey }).pipe(Effect.catchCause(mapDefectToExit));
+			const sidecar = SidecarPlatformLive(paths, process.env);
 
 			const program = registerAgentEffect({
 				hostSessionId: opts.hostSessionId,
@@ -183,15 +168,8 @@ export const endAgentSubcommand = Command.make(
 				? opts.projectKeyOverride.value
 				: resolveProjectKeyFromCwd(opts.cwd);
 
-			const perProjectDbPath = join(resolveProjectDataDir(projectKey), DATA_DB_FILENAME);
-			const registryDbPath = join(resolveRegistryDir(), REGISTRY_DB_FILENAME);
-			const sessionMapDbPath = yield* resolveSessionMapPath().pipe(Effect.catchCause(mapDefectToExit));
-
-			const sidecar = SidecarLive({
-				perProjectDbPath,
-				sessionMapDbPath,
-				registryDbPath,
-			});
+			const paths = yield* resolveHookPaths({ env: process.env, projectKey }).pipe(Effect.catchCause(mapDefectToExit));
+			const sidecar = SidecarPlatformLive(paths, process.env);
 
 			const endedAt = Option.isSome(opts.endedAt) ? opts.endedAt.value : Math.floor(Date.now() / 1000);
 
@@ -215,7 +193,12 @@ const cwdInjectOpt = Flag.String("cwd").pipe(
 
 export const injectEnvSubcommand = Command.make("inject-env", { command: commandOpt, cwd: cwdInjectOpt }, (opts) =>
 	Effect.sync(() => {
-		const out = injectEnv({ command: opts.command, cwd: opts.cwd, env: process.env });
+		const out = injectEnv({
+			command: opts.command,
+			cwd: opts.cwd,
+			env: process.env,
+			readFile: (path) => readFileSync(path, "utf-8"),
+		});
 		process.stdout.write(`${out}\n`);
 	}),
 ).pipe(Command.withDescription("Rewrite a Bash command to prepend VITEST_AGENT_* env vars when it invokes Vitest"));

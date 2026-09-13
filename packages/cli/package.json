@@ -22,6 +22,7 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./main": "./src/main.ts",
 		"./package.json": "./package.json"
 	},
 	"bin": {
@@ -37,12 +38,13 @@
 		"@effect/platform-node": "catalog:effect",
 		"@effect/sql-sqlite-node": "catalog:effect",
 		"@effected/workspaces": "catalog:effected",
+		"@vitest-agent/engine": "workspace:*",
 		"@vitest-agent/sdk": "workspace:*",
 		"@vitest-agent/sidecar": "workspace:*",
 		"effect": "catalog:effect"
 	},
 	"devDependencies": {
-		"@savvy-web/bundler": "^2.3.4",
+		"@savvy-web/bundler": "^2.3.6",
 		"@types/node": "catalog:build",
 		"typescript": "catalog:build",
 		"vitest": "catalog:test"
