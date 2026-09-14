@@ -72,3 +72,6 @@ website/api-docs-snapshot.db
 website/.api-docs/
 .claude/handoffs/
 .claude/dogfood/
+
+# okfit migration scratch
+.okfit-migration/

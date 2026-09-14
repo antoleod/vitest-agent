@@ -113,16 +113,22 @@ on purpose (aligning it moves real installs' data), tracked as a follow-up.
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/engine.md`
+- [`../../okf/modules/engine.md`](../../okf/modules/engine.md)
   Load when working on services, layers, migrations, programs, or the
   platform assembly.
-- `@./.claude/design/vitest-agent/architecture.md`
+- [`../../okf/invariants/ranked-layering.md`](../../okf/invariants/ranked-layering.md)
   Load for the package diagram and the rank rule.
-- `@./.claude/design/vitest-agent/schemas.md`
+- [`../../okf/models/sqlite-schema.md`](../../okf/models/sqlite-schema.md)
   Load when touching SQLite tables or the row assemblers.
-- `@./.claude/design/vitest-agent/file-structure.md`
-  Load when touching `resolveDataPath`, `PathResolutionLive`, hook paths,
-  or workspace-key normalization.
-- `@./.claude/design/vitest-agent/decisions.md`
-  Load for D28 (`ensureMigrated`), D31 (path resolution), D9 (migration
-  policy), D10 (failure signatures).
+- [`../../okf/interfaces/config-toml.md`](../../okf/interfaces/config-toml.md),
+  [`../../okf/gotchas/xdg-fallback-split.md`](../../okf/gotchas/xdg-fallback-split.md)
+  Load when touching `resolveDataPath`, hook paths, or workspace-key
+  normalization.
+- [`../../okf/decisions/28-process-level-migration-coordination-via-globalthis-cache.md`](../../okf/decisions/28-process-level-migration-coordination-via-globalthis-cache.md),
+  [`../../okf/decisions/31-deterministic-xdg-path-resolution.md`](../../okf/decisions/31-deterministic-xdg-path-resolution.md),
+  [`../../okf/decisions/d9-single-pre-2-0-migration-incremental-after.md`](../../okf/decisions/d9-single-pre-2-0-migration-incremental-after.md),
+  [`../../okf/decisions/d10-stable-failure-signatures-via-ast-function-boundary.md`](../../okf/decisions/d10-stable-failure-signatures-via-ast-function-boundary.md)
+  Load for `ensureMigrated`, path resolution, migration policy, and failure
+  signatures respectively.
+- [`../../okf/runbooks/add-a-migration.md`](../../okf/runbooks/add-a-migration.md)
+  Load before adding a new schema migration.

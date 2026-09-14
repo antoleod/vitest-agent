@@ -103,11 +103,11 @@ __test__/
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/ui.md`
+- [`../../okf/modules/ui.md`](../../okf/modules/ui.md)
   Load when working on the event taxonomy, the reducer, the dispatcher matrix, the cells, or the render paths.
-- `@./.claude/design/vitest-agent/components/reporter.md`
+- [`../../okf/modules/reporter.md`](../../okf/modules/reporter.md)
   Load when working on `DefaultVitestAgentReporter` or the Ink live-mount lifecycle — both moved to `@vitest-agent/reporter`.
-- `@./.claude/design/vitest-agent/schemas.md`
-  Load when adding to the `RunEvent` or `RenderState` schemas.
-- `@./.claude/design/vitest-agent/decisions.md`
-  Load for rationale on D41 (T6 shape-tailored dispatcher matrix) and the plugin / reporter / ui layering.
+- [`../../okf/models/run-events.md`](../../okf/models/run-events.md), [`../../okf/models/dispatcher-matrix.md`](../../okf/models/dispatcher-matrix.md)
+  Load when adding to the `RunEvent` / `RenderState` shapes or the dispatcher cell table.
+- [`../../okf/decisions/41-shape-tailored-dispatcher-matrix.md`](../../okf/decisions/41-shape-tailored-dispatcher-matrix.md), [`../../okf/decisions/34-plugin-reporter-split.md`](../../okf/decisions/34-plugin-reporter-split.md)
+  Load for rationale on the shape-tailored dispatcher matrix and the plugin / reporter / ui layering.

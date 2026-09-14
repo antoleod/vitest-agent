@@ -44,7 +44,9 @@ The per-platform SEA binaries ship in four sibling child packages (`@vitest-agen
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/sidecar.md`
-  Load when working on the build pipeline, per-platform child layout, SEA build process, hook integration, or distribution model.
-- `@./.claude/design/vitest-agent/decisions.md`
-  Load for Decision 42 (sidecar env-var resolution approach, dependency inversion rationale).
+- [`../../okf/modules/sidecar.md`](../../okf/modules/sidecar.md)
+  Load when working on the build pipeline (`@savvy-web/bundler`'s `build({ exe })` via `savvy.build.ts`, not tsdown), per-platform child layout, or the distribution model.
+- [`../../okf/decisions/42-three-layer-sidecar-performance-fix.md`](../../okf/decisions/42-three-layer-sidecar-performance-fix.md)
+  Load for the sidecar env-var resolution approach and dependency inversion rationale.
+- [`../../okf/measurements/sidecar-hook-latency.md`](../../okf/measurements/sidecar-hook-latency.md)
+  Load for the qualitative latency numbers this pipeline produces.

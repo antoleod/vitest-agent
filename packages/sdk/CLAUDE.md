@@ -102,12 +102,14 @@ schemas/              -- generated JSON Schemas (`pnpm --filter
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/sdk.md`
+- [`../../okf/modules/sdk.md`](../../okf/modules/sdk.md)
   Load when working on schemas, contracts, formatters, or utilities.
-- `@./.claude/design/vitest-agent/schemas.md`
-  Load when adding or changing Effect Schemas or the reporter contract types.
-- `@./.claude/design/vitest-agent/decisions.md`
-  Load for D40 (options surface / `transport`), D10 (failure signatures),
-  D11 (phase transitions).
-- `@./.claude/design/vitest-agent/testing-strategy.md`
+- [`../../okf/interfaces/sdk-dispatch.md`](../../okf/interfaces/sdk-dispatch.md)
+  Load when working on the pure `./dispatch` entry.
+- [`../../okf/decisions/40-agentpluginoptions-is-exactly-five-fields.md`](../../okf/decisions/40-agentpluginoptions-is-exactly-five-fields.md),
+  [`../../okf/decisions/d10-stable-failure-signatures-via-ast-function-boundary.md`](../../okf/decisions/d10-stable-failure-signatures-via-ast-function-boundary.md),
+  [`../../okf/decisions/d11-tdd-phase-transition-evidence-binding.md`](../../okf/decisions/d11-tdd-phase-transition-evidence-binding.md)
+  Load for the options surface / `transport`, failure signatures, and phase
+  transitions respectively.
+- [`../../okf/conventions/test-patterns.md`](../../okf/conventions/test-patterns.md)
   Load when writing tests for this package.

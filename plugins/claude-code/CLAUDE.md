@@ -216,14 +216,17 @@ The dogfood system was the primary development driver for the hook and agent beh
 
 ## Design docs
 
-- `@./.claude/design/vitest-agent/components/plugin-claude.md`
-  The first-class design doc for this plugin. Load when working on hooks,
-  the tdd-task agent, the MCP loader, the dogfood loop, or `context:fork`
-  semantics.
-- `@./.claude/design/vitest-agent/architecture.md`
-  Load when you need an overview of how the plugin fits with the six npm
+- [`../../okf/modules/claude-code-plugin.md`](../../okf/modules/claude-code-plugin.md)
+  The first-class Module concept for this plugin. Load when working on
+  hooks, the tdd-task agent, the MCP loader, the dogfood loop, or
+  `context:fork` semantics.
+- [`../../okf/project.md`](../../okf/project.md)
+  Load when you need an overview of how the plugin fits with the eight npm
   packages and the MCP server.
-- `@./.claude/design/vitest-agent/decisions.md`
+- [`../../okf/decisions/d16-sidecar-cli-over-mcp-tool-hooks.md`](../../okf/decisions/d16-sidecar-cli-over-mcp-tool-hooks.md),
+  [`../../okf/decisions/d17-claude-env-file-auto-source-and-hook-self-source-bridge.md`](../../okf/decisions/d17-claude-env-file-auto-source-and-hook-self-source-bridge.md),
+  [`../../okf/decisions/d21-conversation-tree-fallback-and-task-id-escape-hatch.md`](../../okf/decisions/d21-conversation-tree-fallback-and-task-id-escape-hatch.md),
+  [`../../okf/decisions/30-plugin-mcp-loader-execs-the-consumer-s-node-modules-bin.md`](../../okf/decisions/30-plugin-mcp-loader-execs-the-consumer-s-node-modules-bin.md)
   Load when you need the rationale behind hook design, evidence binding,
   or the loader strategy.
 

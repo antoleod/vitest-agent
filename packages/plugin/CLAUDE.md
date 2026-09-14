@@ -218,7 +218,9 @@ hanging the caller's test run.
 - **Per-project reporter instances.** The plugin passes
   `projectFilter: project.name` to `AgentReporter` so each instance
   filters `testModules` to its own project. Coverage dedup: only the
-  first alphabetical project processes the global `CoverageMap`.
+  project with the most collected test modules processes the global
+  `CoverageMap` (`reporter.ts` ~line 1878, `projectModuleCounts` sorted
+  descending) — not the first alphabetically.
 
 ## When working in this package
 
@@ -383,29 +385,33 @@ to SQLite as `failed` (no schema or migration change).
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/plugin.md`
+- [`../../okf/modules/plugin.md`](../../okf/modules/plugin.md)
   Load when working on `AgentPlugin`, the internal `AgentReporter`,
   `CoverageAnalyzer`, or the reporter-side utilities.
-- `@./.claude/design/vitest-agent/data-flows.md`
-  Load when tracing the test-run pipeline (Flow 1: `AgentReporter`
-  lifecycle, including the Full-mode persistence/coverage/baseline path
-  and the UI-only short-circuit; Flow 2: `AgentPlugin.configureVitest`,
-  including `ConfigValidation` and `coverageMode` resolution).
-- `@./.claude/design/vitest-agent/decisions.md`
-  Load when you need rationale (especially D40 T7 five-field options
-  surface and the `transport` forward-declaration, D34 plugin/reporter
-  split, D47 render-never-depends-on-persistence, D48 honest run
-  reporting, D38 T4 coverage policy — `coverageMode`, dual-output
-  `COVERAGE_LEVELS` presets, `COVERAGE_AUTOUPDATE`, `ConfigValidation`
-  service — D7 per-call `Effect.runPromise`, D28 `ensureMigrated`
-  globalThis cache, D10 failure signatures, D53 the discovery walkers'
-  filesystem port).
-- `@./.claude/design/vitest-agent/components/discover.md`
+- [`../../okf/interfaces/agent-plugin-options.md`](../../okf/interfaces/agent-plugin-options.md)
+  Load when tracing the test-run pipeline: `AgentReporter` lifecycle
+  (Full-mode persistence/coverage/baseline path and the UI-only
+  short-circuit) and `AgentPlugin.configureVitest` (`ConfigValidation` and
+  `coverageMode` resolution).
+- [`../../okf/decisions/40-agentpluginoptions-is-exactly-five-fields.md`](../../okf/decisions/40-agentpluginoptions-is-exactly-five-fields.md),
+  [`../../okf/decisions/34-plugin-reporter-split.md`](../../okf/decisions/34-plugin-reporter-split.md),
+  [`../../okf/decisions/47-rendering-never-depends-on-persistence.md`](../../okf/decisions/47-rendering-never-depends-on-persistence.md),
+  [`../../okf/decisions/48-honest-run-reporting.md`](../../okf/decisions/48-honest-run-reporting.md),
+  [`../../okf/decisions/38-coverage-policy-presets-configvalidation-full-and-ui-only-modes.md`](../../okf/decisions/38-coverage-policy-presets-configvalidation-full-and-ui-only-modes.md),
+  [`../../okf/decisions/28-process-level-migration-coordination-via-globalthis-cache.md`](../../okf/decisions/28-process-level-migration-coordination-via-globalthis-cache.md),
+  [`../../okf/decisions/d10-stable-failure-signatures-via-ast-function-boundary.md`](../../okf/decisions/d10-stable-failure-signatures-via-ast-function-boundary.md)
+  Load when you need rationale for, respectively: the five-field options
+  surface and the `transport` forward-declaration, the plugin/reporter
+  split, render-never-depends-on-persistence, honest run reporting,
+  coverage policy (`coverageMode`, dual-output `COVERAGE_LEVELS` presets,
+  `COVERAGE_AUTOUPDATE`, `ConfigValidation`), `ensureMigrated`'s globalThis
+  cache, and failure signatures.
+- [`../../okf/interfaces/discover-api.md`](../../okf/interfaces/discover-api.md)
   Load when working on `AgentPlugin.discover()`, the `DiscoverBuilder`
   thenable, `discoverProjects()`, `DiscoverStrategy`,
   `DefaultDiscoverStrategy`, the classifier helpers, the `findTestFiles`
   walker, or the `WalkerFileSystem` port.
-- `@./.claude/design/vitest-agent/testing-strategy.md`
+- [`../../okf/conventions/test-layout.md`](../../okf/conventions/test-layout.md), [`../../okf/conventions/test-patterns.md`](../../okf/conventions/test-patterns.md)
   Load when writing tests for this package, including the `__test__/`
   layout and helper subdirectory exclusion conventions.
 

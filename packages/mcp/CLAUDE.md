@@ -192,18 +192,20 @@ src/
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/mcp.md`
-  Load when working on tool implementations, the strict registrar, or
-  prompts.
-- `@./.claude/design/vitest-agent/data-flows.md`
-  Load when tracing MCP runtime flows (Flow 4: tool dispatch; Flow 7:
-  idempotency).
-- `@./.claude/design/vitest-agent/schemas.md`
-  Load when working with tool input/output shapes, the idempotency
-  registry, or the TDD goal/behavior tables.
-- `@./.claude/design/vitest-agent/decisions.md`
-  Load for rationale (D35 prompts, the idempotency combinator, Decisions
-  21 / 54 / 55 / 56 for `run_tests`).
+- [`../../okf/modules/mcp.md`](../../okf/modules/mcp.md)
+  Load when working on tool implementations, the strict registrar,
+  prompts, or `run_tests` (which runs `createVitest` in-process now, not
+  `spawnSync`).
+- [`../../okf/interfaces/mcp-tools.md`](../../okf/interfaces/mcp-tools.md)
+  Load when tracing tool dispatch or idempotency, or working with tool
+  input/output shapes.
+- [`../../okf/models/sqlite-schema.md`](../../okf/models/sqlite-schema.md)
+  Load when working with the idempotency registry or the TDD goal/behavior
+  tables.
+- [`../../okf/decisions/35-framing-only-mcp-prompts.md`](../../okf/decisions/35-framing-only-mcp-prompts.md),
+  [`../../okf/decisions/71-effect-native-mcp-server.md`](../../okf/decisions/71-effect-native-mcp-server.md)
+  Load for rationale on the framing-only prompts and the Effect-native
+  server rebuild (no MCP SDK, tRPC, or zod).
 
 ## Action-keyed tool surface
 

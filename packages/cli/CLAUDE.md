@@ -120,14 +120,17 @@ thin wrappers that pass `process.env` / `process.cwd()` into them.
 
 ## Design references
 
-- `@./.claude/design/vitest-agent/components/cli.md`
+- [`../../okf/modules/cli.md`](../../okf/modules/cli.md)
   Load when working on subcommands, the `lib/format-*` functions, or
   the `record` subcommand pattern.
-- `@./.claude/design/vitest-agent/data-flows.md`
-  Load when tracing the CLI pipeline (Flow 3: CLI commands; Flow 6:
-  plugin record hooks → CLI → DataStore, including the
+- [`../../okf/interfaces/cli.md`](../../okf/interfaces/cli.md)
+  Load when tracing the CLI's stable command/flag/exit-code contract, or
+  the plugin record hooks → CLI → DataStore path (including the
   `record test-case-turns` mutate-and-read path).
-- `@./.claude/design/vitest-agent/schemas.md`
+- [`../../okf/limitations/spawn-sync-e2e-gap.md`](../../okf/limitations/spawn-sync-e2e-gap.md)
+  Load when working on the `agent record session-start/turn/session-end`
+  path.
+- [`../../okf/models/sqlite-schema.md`](../../okf/models/sqlite-schema.md)
   Load when adding a new `DataReader` query or working with output
   formatter types.
 

@@ -1,0 +1,18 @@
+#:schema https://raw.githubusercontent.com/spencerbeggs/okfit/main/schemas/config/okfit-1.0.0.json
+
+[bundle]
+path = "okf"
+profile = "software-project"
+
+[actors]
+agent = "okfit/claude-code"
+humans = ["human:spencer"]
+
+[tags.effect]
+description = "Concerns an Effect v4 idiom: schemas, services, layers, error channels, or the test runner."
+
+[tags.mcp]
+description = "Concerns the MCP server: tool surface, strict inputs, prompts, session binding, or crash resilience."
+
+[tags.tdd]
+description = "Concerns the TDD orchestration model: goals, behaviors, phases, evidence binding, and artifact attribution."

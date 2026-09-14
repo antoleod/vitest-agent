@@ -24,4 +24,4 @@ This directory holds the repo's agent plugins. They are not npm packages: nothin
 ## Going deeper
 
 - `@./claude-code/CLAUDE.md` — Load when: working inside the plugin; it owns the directory layout, the MCP loader, and the hook / skill / command quick-reference tables.
-- `@../.claude/design/vitest-agent/components/plugin-claude.md` — Load when: changing hook behavior, the `tdd-task` agent, skills, commands, or the dogfood workflow. Do not restate that material here.
+- [`../okf/modules/claude-code-plugin.md`](../okf/modules/claude-code-plugin.md) — Load when: changing hook behavior, the `tdd-task` agent, skills, commands, or the dogfood workflow. Do not restate that material here.
